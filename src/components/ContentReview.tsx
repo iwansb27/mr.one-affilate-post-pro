@@ -1,4 +1,15 @@
 import { useState } from 'react';
+
+function getTimeZoneOffset(date: Date, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone, timeZoneName: 'longOffset' }).formatToParts(date);
+  const value = parts.find(part => part.type === 'timeZoneName')?.value || 'GMT';
+  const match = value.match(/GMT([+-])(\d{2}):?(\d{2})?/);
+  if (!match) return '+00:00';
+  const hours = match[2] || '00';
+  const minutes = match[3] || '00';
+  return `${match[1]}${hours}:${minutes}`;
+}
+
 import type { AffiliateProduct, ContentItem, ScheduledPost, BufferChannel, SocialPlatform } from '../types';
 
 interface ContentReviewProps {
@@ -56,7 +67,12 @@ export default function ContentReview({ contentItems, products, onUpdateStatus, 
 
         const platform = selectedPlatforms[platformIndex % selectedPlatforms.length];
         const time = times[timeIndex % times.length];
-        const scheduledAt = `${date.toISOString().split('T')[0]}T${time}:00`;
+        const dateString = date.toISOString().split('T')[0];
+        const offset = getTimeZoneOffset(new Date(`${dateString}T${time}:00Z`), timezone);
+        const scheduledAt = `${dateString}T${time}:00${offset}`;
+
+        // Never schedule content that is no longer approved.
+        if (content.status !== 'approved') continue;
 
         posts.push({
           id: `sched_${Date.now()}_${posts.length}`,
@@ -65,7 +81,7 @@ export default function ContentReview({ contentItems, products, onUpdateStatus, 
           productName: product.title,
           productImage: '📦',
           platform,
-          scheduledAt: `${scheduledAt}+07:00`,
+          scheduledAt,
           timezone,
           status: 'scheduled',
           idempotencyKey: `idem_${contentId}_${platform}_${day}_${slot}`,
@@ -81,8 +97,9 @@ export default function ContentReview({ contentItems, products, onUpdateStatus, 
 
     if (posts.length > 0) {
       onSchedulePosts(posts);
-      // Mark selected content as scheduled
-      selectedContentIds.forEach(id => onUpdateStatus(id, 'scheduled'));
+      // Keep the approval gate explicit: only content that actually produced a queue entry is marked scheduled.
+      const scheduledContentIds = [...new Set(posts.map(post => post.contentId))];
+      scheduledContentIds.forEach(id => onUpdateStatus(id, 'scheduled'));
       setSelectedContentIds([]);
       alert(`✅ ${posts.length} posting berhasil dijadwalkan untuk 7 hari ke depan!`);
     }
