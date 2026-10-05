@@ -1,11 +1,21 @@
 import { ScheduledPost, Product } from '../types';
+import { ConnectorStatus } from '../services/types';
+
+interface SystemStatus {
+  database: 'CONFIGURED' | 'NOT_CONFIGURED';
+  marketplaceConnectors: Record<string, ConnectorStatus>;
+  socialConnectors: Record<string, ConnectorStatus>;
+  contentEngine: { aiStatus: 'CONFIGURED' | 'NOT_CONFIGURED'; templateStatus: 'FUNCTIONAL' };
+  scheduler: { isConfigured: boolean; workerStatus: 'NOT_RUNNING' | 'RUNNING' };
+}
 
 interface DashboardProps {
   posts: ScheduledPost[];
   products: Product[];
+  systemStatus?: SystemStatus | null;
 }
 
-export default function Dashboard({ posts, products }: DashboardProps) {
+export default function Dashboard({ posts, products, systemStatus }: DashboardProps) {
   const scheduledCount = posts.filter(p => p.status === 'scheduled').length;
   const postedCount = posts.filter(p => p.status === 'posted').length;
   const draftCount = posts.filter(p => p.status === 'draft').length;

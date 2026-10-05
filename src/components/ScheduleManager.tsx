@@ -1,13 +1,23 @@
 import { useState } from 'react';
 import { ScheduledPost } from '../types';
+import { ConnectorStatus } from '../services/types';
+
+interface SystemStatus {
+  database: 'CONFIGURED' | 'NOT_CONFIGURED';
+  marketplaceConnectors: Record<string, ConnectorStatus>;
+  socialConnectors: Record<string, ConnectorStatus>;
+  contentEngine: { aiStatus: 'CONFIGURED' | 'NOT_CONFIGURED'; templateStatus: 'FUNCTIONAL' };
+  scheduler: { isConfigured: boolean; workerStatus: 'NOT_RUNNING' | 'RUNNING' };
+}
 
 interface ScheduleManagerProps {
   posts: ScheduledPost[];
   onDeletePost: (id: string) => void;
   onUpdateStatus: (id: string, status: ScheduledPost['status']) => void;
+  systemStatus?: SystemStatus | null;
 }
 
-export default function ScheduleManager({ posts, onDeletePost, onUpdateStatus }: ScheduleManagerProps) {
+export default function ScheduleManager({ posts, onDeletePost, onUpdateStatus, systemStatus }: ScheduleManagerProps) {
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
   const [filterStatus, setFilterStatus] = useState<'all' | 'draft' | 'scheduled' | 'posted' | 'failed'>('all');
   const [filterPlatform, setFilterPlatform] = useState<string>('all');

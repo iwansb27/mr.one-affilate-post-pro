@@ -1,6 +1,14 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { TabType, Product, ScheduledPost, SocialAccount } from './types';
+import { ConnectorStatus } from './services/types';
 import { sampleProducts, sampleScheduledPosts, sampleAccounts } from './data/sampleData';
+import { 
+  marketplaceConnectorRegistry, 
+  socialConnectorRegistry, 
+  isSupabaseConfigured, 
+  contentEngine,
+  schedulerService 
+} from './services';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import ProductSelector from './components/ProductSelector';
@@ -8,12 +16,53 @@ import ContentCreator from './components/ContentCreator';
 import ScheduleManager from './components/ScheduleManager';
 import AccountManager from './components/AccountManager';
 
+// ============================================
+// SYSTEM STATUS TYPE
+// ============================================
+
+interface SystemStatus {
+  database: 'CONFIGURED' | 'NOT_CONFIGURED';
+  marketplaceConnectors: Record<string, ConnectorStatus>;
+  socialConnectors: Record<string, ConnectorStatus>;
+  contentEngine: {
+    aiStatus: 'CONFIGURED' | 'NOT_CONFIGURED';
+    templateStatus: 'FUNCTIONAL';
+  };
+  scheduler: {
+    isConfigured: boolean;
+    workerStatus: 'NOT_RUNNING' | 'RUNNING';
+  };
+}
+
+// ============================================
+// APP COMPONENT
+// ============================================
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
   const [products, setProducts] = useState<Product[]>(sampleProducts);
   const [scheduledPosts, setScheduledPosts] = useState<ScheduledPost[]>(sampleScheduledPosts);
   const [accounts, setAccounts] = useState<SocialAccount[]>(sampleAccounts);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
+
+  // Initialize system status on mount
+  useEffect(() => {
+    const status: SystemStatus = {
+      database: isSupabaseConfigured() ? 'CONFIGURED' : 'NOT_CONFIGURED',
+      marketplaceConnectors: marketplaceConnectorRegistry.getAllStatuses(),
+      socialConnectors: socialConnectorRegistry.getAllStatuses(),
+      contentEngine: {
+        aiStatus: contentEngine.getAIStatus(),
+        templateStatus: 'FUNCTIONAL',
+      },
+      scheduler: {
+        isConfigured: isSupabaseConfigured(),
+        workerStatus: 'NOT_RUNNING',
+      },
+    };
+    setSystemStatus(status);
+  }, []);
 
   const handleToggleProduct = (id: string) => {
     setProducts(prev => prev.map(p =>
@@ -68,17 +117,17 @@ export default function App() {
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard':
-        return <Dashboard posts={scheduledPosts} products={products} />;
+        return <Dashboard posts={scheduledPosts} products={products} systemStatus={systemStatus} />;
       case 'products':
-        return <ProductSelector products={products} onToggleProduct={handleToggleProduct} />;
+        return <ProductSelector products={products} onToggleProduct={handleToggleProduct} systemStatus={systemStatus} />;
       case 'content':
-        return <ContentCreator products={products} onCreatePost={handleCreatePost} />;
+        return <ContentCreator products={products} onCreatePost={handleCreatePost} systemStatus={systemStatus} />;
       case 'schedule':
-        return <ScheduleManager posts={scheduledPosts} onDeletePost={handleDeletePost} onUpdateStatus={handleUpdateStatus} />;
+        return <ScheduleManager posts={scheduledPosts} onDeletePost={handleDeletePost} onUpdateStatus={handleUpdateStatus} systemStatus={systemStatus} />;
       case 'accounts':
-        return <AccountManager accounts={accounts} onToggleConnection={handleToggleConnection} />;
+        return <AccountManager accounts={accounts} onToggleConnection={handleToggleConnection} systemStatus={systemStatus} />;
       default:
-        return <Dashboard posts={scheduledPosts} products={products} />;
+        return <Dashboard posts={scheduledPosts} products={products} systemStatus={systemStatus} />;
     }
   };
 

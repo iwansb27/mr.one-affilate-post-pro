@@ -1,5 +1,14 @@
 import { useState } from 'react';
 import { Product } from '../types';
+import { ConnectorStatus } from '../services/types';
+
+interface SystemStatus {
+  database: 'CONFIGURED' | 'NOT_CONFIGURED';
+  marketplaceConnectors: Record<string, ConnectorStatus>;
+  socialConnectors: Record<string, ConnectorStatus>;
+  contentEngine: { aiStatus: 'CONFIGURED' | 'NOT_CONFIGURED'; templateStatus: 'FUNCTIONAL' };
+  scheduler: { isConfigured: boolean; workerStatus: 'NOT_RUNNING' | 'RUNNING' };
+}
 
 interface ContentCreatorProps {
   products: Product[];
@@ -11,9 +20,10 @@ interface ContentCreatorProps {
     scheduledDate: string;
     scheduledTime: string;
   }) => void;
+  systemStatus?: SystemStatus | null;
 }
 
-export default function ContentCreator({ products, onCreatePost }: ContentCreatorProps) {
+export default function ContentCreator({ products, onCreatePost, systemStatus }: ContentCreatorProps) {
   const selectedProducts = products.filter(p => p.selected);
   const [selectedProductId, setSelectedProductId] = useState(selectedProducts[0]?.id || '');
   const [caption, setCaption] = useState('');

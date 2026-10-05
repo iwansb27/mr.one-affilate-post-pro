@@ -1,12 +1,22 @@
 import { useState } from 'react';
 import { Product } from '../types';
+import { ConnectorStatus } from '../services/types';
+
+interface SystemStatus {
+  database: 'CONFIGURED' | 'NOT_CONFIGURED';
+  marketplaceConnectors: Record<string, ConnectorStatus>;
+  socialConnectors: Record<string, ConnectorStatus>;
+  contentEngine: { aiStatus: 'CONFIGURED' | 'NOT_CONFIGURED'; templateStatus: 'FUNCTIONAL' };
+  scheduler: { isConfigured: boolean; workerStatus: 'NOT_RUNNING' | 'RUNNING' };
+}
 
 interface ProductSelectorProps {
   products: Product[];
   onToggleProduct: (id: string) => void;
+  systemStatus?: SystemStatus | null;
 }
 
-export default function ProductSelector({ products, onToggleProduct }: ProductSelectorProps) {
+export default function ProductSelector({ products, onToggleProduct, systemStatus }: ProductSelectorProps) {
   const [selectedMarketplace, setSelectedMarketplace] = useState<'all' | 'shopee' | 'lazada' | 'tokopedia'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');

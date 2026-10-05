@@ -1,11 +1,22 @@
 import { SocialAccount } from '../types';
+import { ConnectorStatus } from '../services/types';
+import { marketplaceConnectorRegistry, socialConnectorRegistry, isSupabaseConfigured, contentEngine } from '../services';
+
+interface SystemStatus {
+  database: 'CONFIGURED' | 'NOT_CONFIGURED';
+  marketplaceConnectors: Record<string, ConnectorStatus>;
+  socialConnectors: Record<string, ConnectorStatus>;
+  contentEngine: { aiStatus: 'CONFIGURED' | 'NOT_CONFIGURED'; templateStatus: 'FUNCTIONAL' };
+  scheduler: { isConfigured: boolean; workerStatus: 'NOT_RUNNING' | 'RUNNING' };
+}
 
 interface AccountManagerProps {
   accounts: SocialAccount[];
   onToggleConnection: (id: string) => void;
+  systemStatus?: SystemStatus | null;
 }
 
-export default function AccountManager({ accounts, onToggleConnection }: AccountManagerProps) {
+export default function AccountManager({ accounts, onToggleConnection, systemStatus }: AccountManagerProps) {
   const platformDetails: Record<string, { icon: string; color: string; gradient: string; description: string }> = {
     facebook: { icon: '📘', color: 'bg-blue-600', gradient: 'from-blue-500 to-blue-700', description: 'Posting ke Feed, Stories, dan Reels' },
     instagram: { icon: '📷', color: 'bg-pink-500', gradient: 'from-purple-500 via-pink-500 to-orange-400', description: 'Posting ke Feed, Stories, dan Reels' },
@@ -13,10 +24,16 @@ export default function AccountManager({ accounts, onToggleConnection }: Account
     tiktok: { icon: '🎵', color: 'bg-gray-800', gradient: 'from-gray-800 to-gray-900', description: 'Posting video pendek dan TikTok Shop' },
   };
 
+  // Get real connector statuses
+  const marketplaceStatuses = systemStatus?.marketplaceConnectors || marketplaceConnectorRegistry.getAllStatuses();
+  const socialStatuses = systemStatus?.socialConnectors || socialConnectorRegistry.getAllStatuses();
+  const dbStatus = systemStatus?.database || (isSupabaseConfigured() ? 'CONFIGURED' : 'NOT_CONFIGURED');
+  const aiStatus = systemStatus?.contentEngine?.aiStatus || contentEngine.getAIStatus();
+
   const marketplaceConnections = [
-    { name: 'Shopee Affiliate', icon: '🧡', status: 'connected', products: 45, earnings: 'Rp 2.450.000' },
-    { name: 'Lazada Affiliate', icon: '💙', status: 'connected', products: 32, earnings: 'Rp 1.890.000' },
-    { name: 'Tokopedia Affiliate', icon: '💚', status: 'connected', products: 28, earnings: 'Rp 1.230.000' },
+    { name: 'Shopee Affiliate', icon: '🧡', key: 'shopee', connectorStatus: marketplaceStatuses.shopee || 'NOT_CONFIGURED' },
+    { name: 'Lazada Affiliate', icon: '💙', key: 'lazada', connectorStatus: marketplaceStatuses.lazada || 'NOT_CONFIGURED' },
+    { name: 'Tokopedia Affiliate', icon: '💚', key: 'tokopedia', connectorStatus: marketplaceStatuses.tokopedia || 'NOT_CONFIGURED' },
   ];
 
   return (
@@ -37,18 +54,40 @@ export default function AccountManager({ accounts, onToggleConnection }: Account
                 <span className="text-3xl">{mp.icon}</span>
                 <div>
                   <p className="font-semibold text-gray-800 text-sm">{mp.name}</p>
-                  <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">✓ Terhubung</span>
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${
+                    mp.connectorStatus === 'CONNECTED' ? 'bg-green-100 text-green-700' :
+                    mp.connectorStatus === 'CONNECTOR_READY' ? 'bg-amber-100 text-amber-700' :
+                    'bg-gray-100 text-gray-600'
+                  }`}>
+                    {mp.connectorStatus === 'CONNECTED' ? '✓ Terhubung' :
+                     mp.connectorStatus === 'CONNECTOR_READY' ? '🔌 Connector Ready' :
+                     '⚙️ Not Configured'}
+                  </span>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-2 mt-3">
-                <div className="bg-gray-50 rounded-lg p-2 text-center">
-                  <p className="text-lg font-bold text-gray-800">{mp.products}</p>
-                  <p className="text-xs text-gray-500">Produk</p>
-                </div>
-                <div className="bg-gray-50 rounded-lg p-2 text-center">
-                  <p className="text-sm font-bold text-green-600">{mp.earnings}</p>
-                  <p className="text-xs text-gray-500">Komisi</p>
-                </div>
+              <div className="mt-3">
+                {mp.connectorStatus === 'NOT_CONFIGURED' && (
+                  <div className="bg-gray-50 rounded-lg p-3">
+                    <p className="text-xs text-gray-500 mb-2">API credentials belum dikonfigurasi.</p>
+                    <p className="text-xs text-gray-400">
+                      Set <code className="bg-gray-200 px-1 rounded">VITE_{mp.key.toUpperCase()}_APP_KEY</code> di .env
+                    </p>
+                  </div>
+                )}
+                {mp.connectorStatus === 'CONNECTOR_READY' && (
+                  <div className="bg-amber-50 rounded-lg p-3">
+                    <p className="text-xs text-amber-700">
+                      Connector siap. OAuth flow belum diimplementasi.
+                    </p>
+                  </div>
+                )}
+                {mp.connectorStatus === 'CONNECTED' && (
+                  <div className="bg-green-50 rounded-lg p-3">
+                    <p className="text-xs text-green-700">
+                      ✓ Terhubung dan siap digunakan
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           ))}
@@ -61,9 +100,12 @@ export default function AccountManager({ accounts, onToggleConnection }: Account
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {accounts.map(account => {
             const details = platformDetails[account.platform];
+            const connectorStatus = socialStatuses[account.platform] || 'NOT_CONFIGURED';
             return (
               <div key={account.id} className={`border-2 rounded-xl p-5 transition-all ${
-                account.connected ? 'border-green-200 bg-green-50/50' : 'border-gray-200 bg-gray-50/50'
+                connectorStatus === 'CONNECTED' ? 'border-green-200 bg-green-50/50' :
+                connectorStatus === 'CONNECTOR_READY' ? 'border-amber-200 bg-amber-50/50' :
+                'border-gray-200 bg-gray-50/50'
               }`}>
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-3">
@@ -76,15 +118,35 @@ export default function AccountManager({ accounts, onToggleConnection }: Account
                     </div>
                   </div>
                   <span className={`text-xs px-2 py-1 rounded-full font-medium ${
-                    account.connected ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'
+                    connectorStatus === 'CONNECTED' ? 'bg-green-100 text-green-700' :
+                    connectorStatus === 'CONNECTOR_READY' ? 'bg-amber-100 text-amber-700' :
+                    'bg-gray-200 text-gray-600'
                   }`}>
-                    {account.connected ? '● Terhubung' : '○ Belum'}
+                    {connectorStatus === 'CONNECTED' ? '● Connected' :
+                     connectorStatus === 'CONNECTOR_READY' ? '🔌 Ready' :
+                     '⚙️ Not Configured'}
                   </span>
                 </div>
 
                 <p className="text-xs text-gray-500 mb-3">{details.description}</p>
 
-                {account.connected && (
+                {connectorStatus === 'NOT_CONFIGURED' && (
+                  <div className="bg-gray-100 rounded-lg p-3 mb-3">
+                    <p className="text-xs text-gray-600">
+                      API credentials belum dikonfigurasi. Hubungkan akun setelah setup credentials.
+                    </p>
+                  </div>
+                )}
+
+                {connectorStatus === 'CONNECTOR_READY' && (
+                  <div className="bg-amber-100 rounded-lg p-3 mb-3">
+                    <p className="text-xs text-amber-700">
+                      Connector siap. OAuth flow belum diimplementasi.
+                    </p>
+                  </div>
+                )}
+
+                {connectorStatus === 'CONNECTED' && account.connected && (
                   <div className="flex items-center gap-2 mb-3">
                     <span className="text-sm font-semibold text-gray-700">
                       {account.followers.toLocaleString()} followers
@@ -94,13 +156,18 @@ export default function AccountManager({ accounts, onToggleConnection }: Account
 
                 <button
                   onClick={() => onToggleConnection(account.id)}
+                  disabled={connectorStatus !== 'CONNECTED'}
                   className={`w-full py-2.5 rounded-xl text-sm font-medium transition-all ${
-                    account.connected
-                      ? 'bg-red-100 text-red-700 hover:bg-red-200'
-                      : `bg-gradient-to-r ${details.gradient} text-white hover:opacity-90 shadow-md`
+                    connectorStatus === 'CONNECTED'
+                      ? account.connected
+                        ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                        : `bg-gradient-to-r ${details.gradient} text-white hover:opacity-90 shadow-md`
+                      : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                   }`}
                 >
-                  {account.connected ? 'Putuskan' : 'Hubungkan Akun'}
+                  {connectorStatus === 'CONNECTED' 
+                    ? (account.connected ? 'Putuskan' : 'Hubungkan Akun')
+                    : 'Credentials Required'}
                 </button>
               </div>
             );
