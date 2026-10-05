@@ -1,133 +1,143 @@
 import { useState, useEffect } from 'react';
-import { TabType, Product, ScheduledPost, SocialAccount } from './types';
-import { ConnectorStatus } from './services/types';
-import { sampleProducts, sampleScheduledPosts, sampleAccounts } from './data/sampleData';
-import { 
-  marketplaceConnectorRegistry, 
-  socialConnectorRegistry, 
-  isSupabaseConfigured, 
-  contentEngine,
-  schedulerService 
-} from './services';
+import type { AffiliateProduct, ContentItem, ScheduledPost, BufferChannel, TabType } from './types';
+import { sampleProducts, sampleContentItems, sampleScheduledPosts, sampleBufferChannels } from './data/sampleData';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
-import ProductSelector from './components/ProductSelector';
+import ProductInput from './components/ProductInput';
 import ContentCreator from './components/ContentCreator';
-import ScheduleManager from './components/ScheduleManager';
+import ContentReview from './components/ContentReview';
+import QueueManager from './components/QueueManager';
 import AccountManager from './components/AccountManager';
-
-// ============================================
-// SYSTEM STATUS TYPE
-// ============================================
-
-interface SystemStatus {
-  database: 'CONFIGURED' | 'NOT_CONFIGURED';
-  marketplaceConnectors: Record<string, ConnectorStatus>;
-  socialConnectors: Record<string, ConnectorStatus>;
-  contentEngine: {
-    aiStatus: 'CONFIGURED' | 'NOT_CONFIGURED';
-    templateStatus: 'FUNCTIONAL';
-  };
-  scheduler: {
-    isConfigured: boolean;
-    workerStatus: 'NOT_RUNNING' | 'RUNNING';
-  };
-}
-
-// ============================================
-// APP COMPONENT
-// ============================================
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
-  const [products, setProducts] = useState<Product[]>(sampleProducts);
+  const [products, setProducts] = useState<AffiliateProduct[]>(sampleProducts);
+  const [contentItems, setContentItems] = useState<ContentItem[]>(sampleContentItems);
   const [scheduledPosts, setScheduledPosts] = useState<ScheduledPost[]>(sampleScheduledPosts);
-  const [accounts, setAccounts] = useState<SocialAccount[]>(sampleAccounts);
+  const [bufferChannels, setBufferChannels] = useState<BufferChannel[]>(sampleBufferChannels);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
 
-  // Initialize system status on mount
-  useEffect(() => {
-    const status: SystemStatus = {
-      database: isSupabaseConfigured() ? 'CONFIGURED' : 'NOT_CONFIGURED',
-      marketplaceConnectors: marketplaceConnectorRegistry.getAllStatuses(),
-      socialConnectors: socialConnectorRegistry.getAllStatuses(),
-      contentEngine: {
-        aiStatus: contentEngine.getAIStatus(),
-        templateStatus: 'FUNCTIONAL',
-      },
-      scheduler: {
-        isConfigured: isSupabaseConfigured(),
-        workerStatus: 'NOT_RUNNING',
-      },
-    };
-    setSystemStatus(status);
-  }, []);
-
-  const handleToggleProduct = (id: string) => {
-    setProducts(prev => prev.map(p =>
-      p.id === id ? { ...p, selected: !p.selected } : p
-    ));
+  // Handle adding a new product
+  const handleAddProduct = (product: AffiliateProduct) => {
+    setProducts(prev => [...prev, product]);
   };
 
-  const handleCreatePost = (postData: {
-    productId: string;
-    platforms: string[];
-    caption: string;
-    hashtags: string[];
-    scheduledDate: string;
-    scheduledTime: string;
-  }) => {
-    const product = products.find(p => p.id === postData.productId);
-    if (!product) return;
-
-    const newPost: ScheduledPost = {
-      id: Date.now().toString(),
-      productId: postData.productId,
-      productName: product.name,
-      productImage: product.image,
-      platforms: postData.platforms as ScheduledPost['platforms'],
-      scheduledDate: postData.scheduledDate,
-      scheduledTime: postData.scheduledTime,
-      caption: postData.caption,
-      hashtags: postData.hashtags,
-      status: 'scheduled',
-      marketplace: product.marketplace === 'shopee' ? 'Shopee' : product.marketplace === 'lazada' ? 'Lazada' : 'Tokopedia',
-    };
-
-    setScheduledPosts(prev => [...prev, newPost]);
+  // Handle updating product status
+  const handleUpdateProductStatus = (id: string, status: AffiliateProduct['status']) => {
+    setProducts(prev => prev.map(p => p.id === id ? { ...p, status } : p));
   };
 
+  // Handle deleting product
+  const handleDeleteProduct = (id: string) => {
+    setProducts(prev => prev.filter(p => p.id !== id));
+  };
+
+  // Handle creating content
+  const handleCreateContent = (content: ContentItem) => {
+    setContentItems(prev => [...prev, content]);
+  };
+
+  // Handle updating content status (review workflow)
+  const handleUpdateContentStatus = (id: string, status: ContentItem['status']) => {
+    setContentItems(prev => prev.map(c => c.id === id ? { ...c, status } : c));
+  };
+
+  // Handle updating content
+  const handleUpdateContent = (id: string, updates: Partial<ContentItem>) => {
+    setContentItems(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
+  };
+
+  // Handle deleting content
+  const handleDeleteContent = (id: string) => {
+    setContentItems(prev => prev.filter(c => c.id !== id));
+  };
+
+  // Handle scheduling posts (from queue generator)
+  const handleSchedulePosts = (posts: ScheduledPost[]) => {
+    setScheduledPosts(prev => [...prev, ...posts]);
+  };
+
+  // Handle updating post status
+  const handleUpdatePostStatus = (id: string, status: ScheduledPost['status']) => {
+    setScheduledPosts(prev => prev.map(p => p.id === id ? { ...p, status } : p));
+  };
+
+  // Handle deleting post
   const handleDeletePost = (id: string) => {
     setScheduledPosts(prev => prev.filter(p => p.id !== id));
   };
 
-  const handleUpdateStatus = (id: string, status: ScheduledPost['status']) => {
-    setScheduledPosts(prev => prev.map(p =>
-      p.id === id ? { ...p, status } : p
-    ));
-  };
-
-  const handleToggleConnection = (id: string) => {
-    setAccounts(prev => prev.map(a =>
-      a.id === id ? { ...a, connected: !a.connected } : a
-    ));
+  // Handle updating buffer channels
+  const handleUpdateChannel = (id: string, updates: Partial<BufferChannel>) => {
+    setBufferChannels(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
   };
 
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard':
-        return <Dashboard posts={scheduledPosts} products={products} systemStatus={systemStatus} />;
+        return (
+          <Dashboard
+            products={products}
+            contentItems={contentItems}
+            scheduledPosts={scheduledPosts}
+            bufferChannels={bufferChannels}
+          />
+        );
       case 'products':
-        return <ProductSelector products={products} onToggleProduct={handleToggleProduct} systemStatus={systemStatus} />;
+        return (
+          <ProductInput
+            products={products}
+            onAddProduct={handleAddProduct}
+            onUpdateStatus={handleUpdateProductStatus}
+            onDeleteProduct={handleDeleteProduct}
+          />
+        );
       case 'content':
-        return <ContentCreator products={products} onCreatePost={handleCreatePost} systemStatus={systemStatus} />;
+        return (
+          <ContentCreator
+            products={products}
+            contentItems={contentItems}
+            onCreateContent={handleCreateContent}
+            onUpdateContent={handleUpdateContent}
+            onDeleteContent={handleDeleteContent}
+          />
+        );
+      case 'review':
+        return (
+          <ContentReview
+            contentItems={contentItems}
+            products={products}
+            onUpdateStatus={handleUpdateContentStatus}
+            onUpdateContent={handleUpdateContent}
+            onSchedulePosts={handleSchedulePosts}
+            bufferChannels={bufferChannels}
+          />
+        );
       case 'schedule':
-        return <ScheduleManager posts={scheduledPosts} onDeletePost={handleDeletePost} onUpdateStatus={handleUpdateStatus} systemStatus={systemStatus} />;
+        return (
+          <QueueManager
+            scheduledPosts={scheduledPosts}
+            contentItems={contentItems}
+            onUpdateStatus={handleUpdatePostStatus}
+            onDeletePost={handleDeletePost}
+          />
+        );
       case 'accounts':
-        return <AccountManager accounts={accounts} onToggleConnection={handleToggleConnection} systemStatus={systemStatus} />;
+        return (
+          <AccountManager
+            channels={bufferChannels}
+            onUpdateChannel={handleUpdateChannel}
+          />
+        );
       default:
-        return <Dashboard posts={scheduledPosts} products={products} systemStatus={systemStatus} />;
+        return (
+          <Dashboard
+            products={products}
+            contentItems={contentItems}
+            scheduledPosts={scheduledPosts}
+            bufferChannels={bufferChannels}
+          />
+        );
     }
   };
 
@@ -139,34 +149,23 @@ export default function App() {
           <span className="text-xl">🚀</span>
           <span className="font-bold">AffiliatePost Pro</span>
         </div>
-        <button
-          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          className="text-2xl"
-        >
+        <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="text-2xl">
           {mobileMenuOpen ? '✕' : '☰'}
         </button>
       </div>
 
-      {/* Mobile Menu Overlay */}
+      {/* Mobile Menu */}
       {mobileMenuOpen && (
         <div className="lg:hidden fixed inset-0 z-40 bg-black/50" onClick={() => setMobileMenuOpen(false)}>
           <div className="w-64" onClick={e => e.stopPropagation()}>
-            <Sidebar
-              activeTab={activeTab}
-              setActiveTab={(tab) => {
-                setActiveTab(tab);
-                setMobileMenuOpen(false);
-              }}
-            />
+            <Sidebar activeTab={activeTab} setActiveTab={(tab) => { setActiveTab(tab); setMobileMenuOpen(false); }} />
           </div>
         </div>
       )}
 
       {/* Desktop Sidebar */}
-      <div className="hidden lg:block">
-        <div className="fixed left-0 top-0 bottom-0">
-          <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
-        </div>
+      <div className="hidden lg:block fixed left-0 top-0 bottom-0">
+        <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
       </div>
 
       {/* Main Content */}

@@ -1,286 +1,316 @@
 import { useState } from 'react';
-import { Product } from '../types';
-import { ConnectorStatus } from '../services/types';
-
-interface SystemStatus {
-  database: 'CONFIGURED' | 'NOT_CONFIGURED';
-  marketplaceConnectors: Record<string, ConnectorStatus>;
-  socialConnectors: Record<string, ConnectorStatus>;
-  contentEngine: { aiStatus: 'CONFIGURED' | 'NOT_CONFIGURED'; templateStatus: 'FUNCTIONAL' };
-  scheduler: { isConfigured: boolean; workerStatus: 'NOT_RUNNING' | 'RUNNING' };
-}
+import type { AffiliateProduct, ContentItem, SocialPlatform, ContentStyle, ScheduledPost, BufferChannel } from '../types';
 
 interface ContentCreatorProps {
-  products: Product[];
-  onCreatePost: (post: {
-    productId: string;
-    platforms: string[];
-    caption: string;
-    hashtags: string[];
-    scheduledDate: string;
-    scheduledTime: string;
-  }) => void;
-  systemStatus?: SystemStatus | null;
+  products: AffiliateProduct[];
+  contentItems: ContentItem[];
+  onCreateContent: (content: ContentItem) => void;
+  onUpdateContent: (id: string, updates: Partial<ContentItem>) => void;
+  onDeleteContent: (id: string) => void;
 }
 
-export default function ContentCreator({ products, onCreatePost, systemStatus }: ContentCreatorProps) {
-  const selectedProducts = products.filter(p => p.selected);
-  const [selectedProductId, setSelectedProductId] = useState(selectedProducts[0]?.id || '');
-  const [caption, setCaption] = useState('');
-  const [hashtags, setHashtags] = useState('');
-  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
-  const [scheduledDate, setScheduledDate] = useState('');
-  const [scheduledTime, setSelectedTime] = useState('');
-  const [showPreview, setShowPreview] = useState(false);
-  const [generatedContent, setGeneratedContent] = useState('');
+const contentStyles: { id: ContentStyle; label: string; icon: string }[] = [
+  { id: 'review', label: 'Product Review', icon: '⭐' },
+  { id: 'soft_selling', label: 'Soft Selling', icon: '💬' },
+  { id: 'problem_solution', label: 'Problem/Solution', icon: '💡' },
+  { id: 'promotional', label: 'Promotional', icon: '🔥' },
+  { id: 'educational', label: 'Educational', icon: '📚' },
+  { id: 'short_hook', label: 'Short Hook', icon: '⚡' },
+];
 
-  const platforms = [
-    { id: 'facebook', name: 'Facebook', icon: '📘', color: 'bg-blue-600', maxCaption: 63206 },
-    { id: 'instagram', name: 'Instagram', icon: '📷', color: 'bg-pink-500', maxCaption: 2200 },
-    { id: 'youtube', name: 'YouTube', icon: '📺', color: 'bg-red-600', maxCaption: 5000 },
-    { id: 'tiktok', name: 'TikTok', icon: '🎵', color: 'bg-gray-800', maxCaption: 2200 },
-  ];
+const platforms: { id: SocialPlatform; label: string; icon: string }[] = [
+  { id: 'facebook', label: 'Facebook', icon: '📘' },
+  { id: 'tiktok', label: 'TikTok', icon: '🎵' },
+  { id: 'youtube', label: 'YouTube', icon: '📺' },
+];
 
-  const togglePlatform = (platformId: string) => {
-    setSelectedPlatforms(prev =>
-      prev.includes(platformId)
-        ? prev.filter(p => p !== platformId)
-        : [...prev, platformId]
-    );
+// Template-based content generation per platform and style
+function generateContent(product: AffiliateProduct, platform: SocialPlatform, style: ContentStyle): Partial<ContentItem> {
+  const discount = product.originalPrice ? Math.round((1 - product.price / product.originalPrice) * 100) : 0;
+  const price = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(product.price);
+  const mpName = product.marketplace.charAt(0).toUpperCase() + product.marketplace.slice(1);
+
+  const templates: Record<SocialPlatform, Record<ContentStyle, { title?: string; caption: string; hashtags: string[]; cta: string }>> = {
+    facebook: {
+      review: {
+        caption: `🔥 REVIEW JUJUR: ${product.title}\n\nSetelah coba produk ini, jujur worth it banget!\n\n💰 ${price}${discount > 0 ? ` (Diskon ${discount}%)` : ''}\n✅ Kualitas premium\n✅ Harga terjangkau\n\n🔗 Link pembelian di komentar!`,
+        hashtags: ['#ReviewJujur', '#Rekomendasi', `#${mpName}Finds`, '#WorthIt'],
+        cta: `Beli di ${mpName} → Link di komentar`,
+      },
+      soft_selling: {
+        caption: `Cerita dikit ya...\n\nDulu aku susah banget cari ${product.title.split(' ')[0]} yang bagus. Terus coba yang ini dan ternyata...\n\n${price} doang tapi kualitasnya gak main-main! 🤩\n\nYang mau tau link-nya, cek komentar ya 👇`,
+        hashtags: ['#StoryTime', '#Rekomendasi', '#RacunOnline'],
+        cta: `Link di komentar ya!`,
+      },
+      problem_solution: {
+        caption: `Pernah gak sih ngalamin ini? 😩\n\nAku dulu juga gitu, sampai akhirnya ketemu ${product.title}!\n\n✅ Masalah solved\n✅ Harga cuma ${price}\n\n🔗 Link di komentar!`,
+        hashtags: ['#Solusi', '#LifeHack', `#${mpName}Finds`],
+        cta: `Solusi ada di komentar →`,
+      },
+      promotional: {
+        caption: `🚨 FLASH SALE ALERT! 🚨\n\n${product.title}\n\n💰 ${price}${discount > 0 ? `\n🔥 HEMAT ${discount}%!` : ''}\n\nBuruan sebelum kehabisan! 🔗 Link di komentar!`,
+        hashtags: ['#FlashSale', '#Diskon', '#Promo', '#Murah'],
+        cta: `Beli sekarang → Link di komentar`,
+      },
+      educational: {
+        caption: `📚 TAHUKAH KAMU?\n\nTips memilih ${product.title.split(' ')[0]} yang bagus:\n\n1. Perhatikan kualitas\n2. Cek review pembeli\n3. Bandingkan harga\n\nDan aku rekomendasiin yang ini karena...\n\n💰 ${price}\n🔗 Link di komentar!`,
+        hashtags: ['#Tips', '#Edukasi', '#InfoProduk'],
+        cta: `Link produk di komentar`,
+      },
+      short_hook: {
+        caption: `${product.title} cuma ${price}?! 🤯\n\nGak percaya? Swipe →`,
+        hashtags: ['#Viral', '#Murah', '#Racun'],
+        cta: `Link di komentar!`,
+      },
+    },
+    tiktok: {
+      review: {
+        caption: `${product.title} ${price}!\n\nWorth it gak? Tonton sampai habis! 🔥\n\nLink di bio 👆`,
+        hashtags: [`#${mpName}Finds`, '#Review', '#Racun', '#Murah'],
+        cta: 'Link di bio',
+      },
+      soft_selling: {
+        caption: `POV: Kamu nemu ${product.title.split(' ')[0]} terbaik dengan harga ${price} 😍\n\nLink di bio!`,
+        hashtags: ['#POV', '#Racun', '#FYP', '#Viral'],
+        cta: 'Link di bio',
+      },
+      problem_solution: {
+        caption: `Stop scroll! Kalau kamu punya masalah ini, aku punya solusinya!\n\n${product.title} - ${price}\n\nLink di bio 👆`,
+        hashtags: ['#Solusi', '#LifeHack', '#FYP'],
+        cta: 'Link di bio',
+      },
+      promotional: {
+        caption: `🚨 ${discount > 0 ? `DISKON ${discount}%` : 'PROMO'}! 🚨\n${product.title}\n${price}\n\nBuruan sebelum habis!\nLink di bio 🔗`,
+        hashtags: ['#FlashSale', '#Diskon', '#FYP', '#Viral'],
+        cta: 'Link di bio',
+      },
+      educational: {
+        caption: `3 hal yang harus kamu tau sebelum beli ${product.title.split(' ')[0]}:\n\n1️⃣ Kualitas\n2️⃣ Harga\n3️⃣ Review\n\nSemua ada di video ini!\nLink di bio 👆`,
+        hashtags: ['#Tips', '#Edukasi', '#FYP'],
+        cta: 'Link di bio',
+      },
+      short_hook: {
+        caption: `${product.title} ${price}?! 🤯\nLink di bio 👆`,
+        hashtags: ['#Viral', '#Murah', '#FYP'],
+        cta: 'Link di bio',
+      },
+    },
+    youtube: {
+      review: {
+        title: `Review Jujur ${product.title} | Worth It?`,
+        caption: `Review lengkap ${product.title}!\n\n💰 Harga: ${price}${discount > 0 ? ` (Diskon ${discount}%)` : ''}\n\n🔗 Link pembelian: ${product.affiliateUrl}\n\nTimestamp:\n00:00 - Intro\n01:00 - Unboxing\n03:00 - Review\n05:00 - Kesimpulan\n\nJangan lupa like & subscribe!`,
+        hashtags: ['#Review', `#${mpName}`, '#WorthIt', '#Rekomendasi'],
+        cta: 'Link di deskripsi',
+      },
+      soft_selling: {
+        title: `Akhirnya Nemu ${product.title.split(' ')[0]} Terbaik!`,
+        caption: `Cerita pengalaman aku pakai ${product.title}...\n\n💰 ${price}\n\n🔗 Link: ${product.affiliateUrl}\n\nLike & Subscribe!`,
+        hashtags: ['#StoryTime', '#Rekomendasi', '#Review'],
+        cta: 'Link di deskripsi',
+      },
+      problem_solution: {
+        title: `Solusi ${product.title.split(' ')[0]} Terbaik - ${price}!`,
+        caption: `Punya masalah ini? Aku punya solusinya!\n\n${product.title}\n💰 ${price}\n\n🔗 Link: ${product.affiliateUrl}`,
+        hashtags: ['#Solusi', '#Tips', '#Review'],
+        cta: 'Link di deskripsi',
+      },
+      promotional: {
+        title: `🔥 ${discount > 0 ? `DISKON ${discount}%` : 'PROMO'} - ${product.title}!`,
+        caption: `PROMO ALERT!\n\n${product.title}\n💰 ${price}${discount > 0 ? ` (Hemat ${discount}%)` : ''}\n\n🔗 Link: ${product.affiliateUrl}\n\nBuruan sebelum kehabisan!`,
+        hashtags: ['#Promo', '#Diskon', '#FlashSale'],
+        cta: 'Link di deskripsi',
+      },
+      educational: {
+        title: `Panduan Lengkap Memilih ${product.title.split(' ')[0]}`,
+        caption: `Panduan lengkap sebelum beli ${product.title}!\n\n💰 ${price}\n\n🔗 Link: ${product.affiliateUrl}\n\nSubscribe untuk tips lainnya!`,
+        hashtags: ['#Tutorial', '#Panduan', '#Tips'],
+        cta: 'Link di deskripsi',
+      },
+      short_hook: {
+        title: `${product.title} Cuma ${price}?!`,
+        caption: `Shorts: ${product.title} ${price}!\n\n🔗 Link: ${product.affiliateUrl}`,
+        hashtags: ['#Shorts', '#Viral', '#Murah'],
+        cta: 'Link di deskripsi',
+      },
+    },
   };
 
-  const generateContent = () => {
+  const template = templates[platform][style];
+  return {
+    title: template.title,
+    caption: template.caption,
+    hashtags: template.hashtags,
+    cta: template.cta,
+  };
+}
+
+export default function ContentCreator({ products, contentItems, onCreateContent, onUpdateContent, onDeleteContent }: ContentCreatorProps) {
+  const readyProducts = products.filter(p => p.status === 'ready');
+  const [selectedProductId, setSelectedProductId] = useState(readyProducts[0]?.id || '');
+  const [selectedPlatform, setSelectedPlatform] = useState<SocialPlatform>('facebook');
+  const [selectedStyle, setSelectedStyle] = useState<ContentStyle>('review');
+  const [generatedTitle, setGeneratedTitle] = useState('');
+  const [generatedCaption, setGeneratedCaption] = useState('');
+  const [generatedHashtags, setGeneratedHashtags] = useState('');
+  const [generatedCta, setGeneratedCta] = useState('');
+
+  const handleGenerate = () => {
     const product = products.find(p => p.id === selectedProductId);
     if (!product) return;
 
-    const templates = [
-      `🔥 REVIEW JUJUR! 🔥\n\n${product.name}\n\n💰 Harga: Rp ${product.price.toLocaleString('id-ID')}\n⭐ Rating: ${product.rating}/5\n📦 Terjual: ${product.sold.toLocaleString()}+\n\nKenapa produk ini worth it?\n✅ Kualitas premium\n✅ Harga terjangkau\n✅ Banyak yang sudah buktiin\n\n🔗 Link di bio!\n\n${hashtags || '#review #rekomendasi #murah'}`,
-      `✨ MUST HAVE ITEM! ✨\n\nSiapa yang belum punya ${product.name}?\n\nIni dia produk yang lagi VIRAL banget! 🤩\n\n💸 Cuma Rp ${product.price.toLocaleString('id-ID')} (Diskon ${Math.round((1 - product.price / product.originalPrice) * 100)}%)\n⭐ Rating ${product.rating} dari ${product.sold.toLocaleString()} pembeli!\n\nJangan sampai kehabisan ya! 🏃‍♂️💨\n\n🔗 Cek link di bio sekarang!\n\n${hashtags || '#viral #musthave #diskon'}`,
-      `🛒 HAUL BELANJA! 🛒\n\nHari ini mau share produk yang baru aku beli:\n\n📌 ${product.name}\n\n💰 Price: Rp ${product.price.toLocaleString('id-ID')}\n🏷️ Original: Rp ${product.originalPrice.toLocaleString('id-ID')}\n💸 Save: Rp ${(product.originalPrice - product.price).toLocaleString('id-ID')}!\n\nJujur ini worth every penny! Kualitasnya bagus banget buat harga segitu. Yang mau beli, link-nya ada di bio ya! 👆\n\n${hashtags || '#haul #belanja #shopeehaul #racun'}`,
-    ];
-
-    const randomTemplate = templates[Math.floor(Math.random() * templates.length)];
-    setGeneratedContent(randomTemplate);
-    setCaption(randomTemplate);
+    const result = generateContent(product, selectedPlatform, selectedStyle);
+    setGeneratedTitle(result.title || '');
+    setGeneratedCaption(result.caption || '');
+    setGeneratedHashtags((result.hashtags || []).join(' '));
+    setGeneratedCta(result.cta || '');
   };
 
-  const handleSubmit = () => {
-    if (!selectedProductId || selectedPlatforms.length === 0 || !scheduledDate || !scheduledTime) {
-      alert('Lengkapi semua field yang diperlukan!');
+  const handleSave = () => {
+    if (!selectedProductId || !generatedCaption) {
+      alert('Pilih produk dan generate konten terlebih dahulu');
       return;
     }
 
-    onCreatePost({
+    const now = new Date().toISOString();
+    const newContent: ContentItem = {
+      id: `content_${Date.now()}`,
       productId: selectedProductId,
-      platforms: selectedPlatforms,
-      caption,
-      hashtags: hashtags.split(' ').filter(h => h.startsWith('#')),
-      scheduledDate,
-      scheduledTime,
-    });
+      platform: selectedPlatform,
+      title: generatedTitle || undefined,
+      caption: generatedCaption,
+      hashtags: generatedHashtags.split(' ').filter(h => h.startsWith('#')),
+      cta: generatedCta,
+      contentStyle: selectedStyle,
+      status: 'draft',
+      createdAt: now,
+      updatedAt: now,
+    };
 
-    // Reset form
-    setCaption('');
-    setHashtags('');
-    setSelectedPlatforms([]);
-    setScheduledDate('');
-    setSelectedTime('');
-    setGeneratedContent('');
-    alert('✅ Konten berhasil dibuat dan dijadwalkan!');
+    onCreateContent(newContent);
+    setGeneratedTitle('');
+    setGeneratedCaption('');
+    setGeneratedHashtags('');
+    setGeneratedCta('');
+  };
+
+  const statusColors: Record<string, string> = {
+    draft: 'bg-gray-100 text-gray-700',
+    review: 'bg-blue-100 text-blue-700',
+    approved: 'bg-green-100 text-green-700',
+    rejected: 'bg-red-100 text-red-700',
+    scheduled: 'bg-purple-100 text-purple-700',
+    published: 'bg-emerald-100 text-emerald-700',
+    failed: 'bg-orange-100 text-orange-700',
   };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
         <h1 className="text-3xl font-bold text-gray-800">Buat Konten</h1>
-        <p className="text-gray-500 mt-1">Buat konten menarik untuk produk affiliate yang dipilih</p>
+        <p className="text-gray-500 mt-1">Generate konten platform-specific untuk produk affiliate</p>
       </div>
 
-      {selectedProducts.length === 0 ? (
+      {readyProducts.length === 0 ? (
         <div className="bg-white rounded-2xl p-12 text-center shadow-sm border border-gray-100">
           <span className="text-6xl mb-4 block">🛒</span>
-          <h3 className="text-xl font-semibold text-gray-700 mb-2">Belum Ada Produk Dipilih</h3>
-          <p className="text-gray-500">Pilih produk affiliate terlebih dahulu di halaman "Pilih Produk"</p>
+          <h3 className="text-xl font-semibold text-gray-700 mb-2">Belum Ada Produk Ready</h3>
+          <p className="text-gray-500">Tambah produk dan set status ke "Ready" terlebih dahulu di halaman Produk.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Left - Content Form */}
+          {/* Generator */}
           <div className="space-y-4">
-            {/* Product Selection */}
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
               <h3 className="font-semibold text-gray-800 mb-3">🛒 Pilih Produk</h3>
-              <select
-                value={selectedProductId}
-                onChange={(e) => setSelectedProductId(e.target.value)}
-                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-              >
-                {selectedProducts.map(p => (
-                  <option key={p.id} value={p.id}>{p.image} {p.name} - {p.marketplace}</option>
+              <select value={selectedProductId} onChange={e => setSelectedProductId(e.target.value)}
+                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500">
+                {readyProducts.map(p => (
+                  <option key={p.id} value={p.id}>{p.title} ({p.marketplace})</option>
                 ))}
               </select>
             </div>
 
-            {/* Platform Selection */}
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-              <h3 className="font-semibold text-gray-800 mb-3">📱 Pilih Platform</h3>
-              <div className="grid grid-cols-2 gap-3">
-                {platforms.map(platform => (
-                  <button
-                    key={platform.id}
-                    onClick={() => togglePlatform(platform.id)}
-                    className={`flex items-center gap-2 p-3 rounded-xl border-2 transition-all ${
-                      selectedPlatforms.includes(platform.id)
-                        ? 'border-purple-500 bg-purple-50'
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}
-                  >
-                    <span className="text-xl">{platform.icon}</span>
-                    <span className="text-sm font-medium">{platform.name}</span>
-                    {selectedPlatforms.includes(platform.id) && (
-                      <span className="ml-auto text-green-500">✓</span>
-                    )}
+              <h3 className="font-semibold text-gray-800 mb-3">📱 Platform</h3>
+              <div className="grid grid-cols-3 gap-3">
+                {platforms.map(p => (
+                  <button key={p.id} onClick={() => setSelectedPlatform(p.id)}
+                    className={`flex flex-col items-center gap-1 p-3 rounded-xl border-2 transition-all ${
+                      selectedPlatform === p.id ? 'border-purple-500 bg-purple-50' : 'border-gray-200 hover:border-gray-300'
+                    }`}>
+                    <span className="text-2xl">{p.icon}</span>
+                    <span className="text-xs font-medium">{p.label}</span>
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Schedule */}
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-              <h3 className="font-semibold text-gray-800 mb-3">📅 Jadwal Posting</h3>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs text-gray-500 mb-1 block">Tanggal</label>
-                  <input
-                    type="date"
-                    value={scheduledDate}
-                    onChange={(e) => setScheduledDate(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-gray-500 mb-1 block">Waktu</label>
-                  <input
-                    type="time"
-                    value={scheduledTime}
-                    onChange={(e) => setSelectedTime(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Caption */}
-            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-semibold text-gray-800">✍️ Caption</h3>
-                <button
-                  onClick={generateContent}
-                  className="text-xs bg-purple-100 text-purple-700 px-3 py-1.5 rounded-lg font-medium hover:bg-purple-200 transition-colors"
-                >
-                  ✨ Generate Otomatis
-                </button>
-              </div>
-              <textarea
-                value={caption}
-                onChange={(e) => setCaption(e.target.value)}
-                placeholder="Tulis caption menarik untuk produk ini..."
-                rows={6}
-                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
-              />
-              <p className="text-xs text-gray-400 mt-1">{caption.length} karakter</p>
-            </div>
-
-            {/* Hashtags */}
-            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-              <h3 className="font-semibold text-gray-800 mb-3"># Hashtags</h3>
-              <input
-                type="text"
-                value={hashtags}
-                onChange={(e) => setHashtags(e.target.value)}
-                placeholder="#review #rekomendasi #murah #viral"
-                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-              />
-              <div className="flex flex-wrap gap-2 mt-3">
-                {['#review', '#rekomendasi', '#murah', '#viral', '#racun', '#diskon', '#haul', '#worthit'].map(tag => (
-                  <button
-                    key={tag}
-                    onClick={() => setHashtags(prev => prev ? `${prev} ${tag}` : tag)}
-                    className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-lg hover:bg-purple-100 hover:text-purple-700 transition-colors"
-                  >
-                    {tag}
+              <h3 className="font-semibold text-gray-800 mb-3">🎨 Content Style</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {contentStyles.map(s => (
+                  <button key={s.id} onClick={() => setSelectedStyle(s.id)}
+                    className={`flex items-center gap-2 p-3 rounded-xl border-2 text-left transition-all ${
+                      selectedStyle === s.id ? 'border-purple-500 bg-purple-50' : 'border-gray-200 hover:border-gray-300'
+                    }`}>
+                    <span>{s.icon}</span>
+                    <span className="text-xs font-medium">{s.label}</span>
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Submit */}
-            <button
-              onClick={handleSubmit}
-              className="w-full gradient-primary text-white py-4 rounded-2xl font-semibold text-lg shadow-lg shadow-purple-500/30 hover:shadow-xl hover:shadow-purple-500/40 transition-all"
-            >
-              🚀 Jadwalkan Posting
+            <button onClick={handleGenerate}
+              className="w-full gradient-primary text-white py-3 rounded-xl font-semibold shadow-lg shadow-purple-500/30 hover:shadow-xl transition-all">
+              ✨ Generate Konten
             </button>
           </div>
 
-          {/* Right - Preview */}
+          {/* Preview & Edit */}
           <div className="space-y-4">
-            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 sticky top-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold text-gray-800">👁️ Preview Konten</h3>
-                <button
-                  onClick={() => setShowPreview(!showPreview)}
-                  className="text-xs text-purple-600 hover:text-purple-700 font-medium"
-                >
-                  {showPreview ? 'Tutup' : 'Buka'} Preview
-                </button>
+            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+              <h3 className="font-semibold text-gray-800 mb-3">✍️ Edit Konten</h3>
+              {selectedPlatform === 'youtube' && (
+                <div className="mb-3">
+                  <label className="text-xs text-gray-500 mb-1 block">Title</label>
+                  <input type="text" value={generatedTitle} onChange={e => setGeneratedTitle(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500" />
+                </div>
+              )}
+              <div className="mb-3">
+                <label className="text-xs text-gray-500 mb-1 block">Caption</label>
+                <textarea value={generatedCaption} onChange={e => setGeneratedCaption(e.target.value)} rows={8}
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none" />
+                <p className="text-xs text-gray-400 mt-1">{generatedCaption.length} karakter</p>
               </div>
+              <div className="mb-3">
+                <label className="text-xs text-gray-500 mb-1 block">Hashtags</label>
+                <input type="text" value={generatedHashtags} onChange={e => setGeneratedHashtags(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500" />
+              </div>
+              <div className="mb-3">
+                <label className="text-xs text-gray-500 mb-1 block">CTA</label>
+                <input type="text" value={generatedCta} onChange={e => setGeneratedCta(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500" />
+              </div>
+              <button onClick={handleSave}
+                className="w-full bg-green-600 text-white py-3 rounded-xl font-semibold hover:bg-green-700 transition-colors">
+                💾 Simpan Konten
+              </button>
+            </div>
 
-              {selectedProductId && (
-                <div className="mb-4 p-4 bg-gray-50 rounded-xl">
-                  <div className="flex items-center gap-3">
-                    <span className="text-3xl">{products.find(p => p.id === selectedProductId)?.image}</span>
-                    <div>
-                      <p className="font-medium text-sm text-gray-800">{products.find(p => p.id === selectedProductId)?.name}</p>
-                      <p className="text-xs text-gray-500">Rp {products.find(p => p.id === selectedProductId)?.price.toLocaleString('id-ID')}</p>
-                    </div>
+            {/* Existing Content List */}
+            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+              <h3 className="font-semibold text-gray-800 mb-3">📋 Konten Saya ({contentItems.length})</h3>
+              <div className="space-y-2 max-h-60 overflow-y-auto">
+                {contentItems.map(c => (
+                  <div key={c.id} className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
+                    <span>{c.platform === 'facebook' ? '📘' : c.platform === 'tiktok' ? '🎵' : '📺'}</span>
+                    <span className="text-xs font-medium text-gray-700 flex-1 truncate">{c.title || c.caption.slice(0, 40)}...</span>
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${statusColors[c.status]}`}>{c.status}</span>
                   </div>
-                </div>
-              )}
-
-              {showPreview && caption && (
-                <div className="space-y-4">
-                  {selectedPlatforms.map(platformId => {
-                    const platform = platforms.find(p => p.id === platformId);
-                    if (!platform) return null;
-                    return (
-                      <div key={platformId} className={`border rounded-xl p-4 ${platform.color} bg-opacity-5`}>
-                        <div className="flex items-center gap-2 mb-2">
-                          <span>{platform.icon}</span>
-                          <span className="text-sm font-medium text-gray-700">Preview {platform.name}</span>
-                        </div>
-                        <div className="bg-white rounded-lg p-3 text-xs text-gray-600 whitespace-pre-wrap max-h-40 overflow-y-auto">
-                          {caption}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {!showPreview && (
-                <div className="text-center py-8 text-gray-400">
-                  <span className="text-4xl block mb-2">👁️</span>
-                  <p className="text-sm">Klik "Buka Preview" untuk melihat tampilan konten</p>
-                </div>
-              )}
-
-              {generatedContent && (
-                <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-xl">
-                  <p className="text-xs text-green-700 font-medium mb-1">✨ Konten berhasil di-generate!</p>
-                  <p className="text-xs text-green-600">Anda bisa mengedit caption sesuai keinginan sebelum dijadwalkan.</p>
-                </div>
-              )}
+                ))}
+              </div>
             </div>
           </div>
         </div>
