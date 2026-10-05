@@ -67,6 +67,8 @@ class BufferServiceImpl implements BufferService {
   }
 
   getStatus(): 'NOT_CONFIGURED' | 'CONNECTOR_READY' | 'CONNECTED' | 'ERROR' {
+    // Presence of a client-side token only proves configuration exists.
+    // A live API verification is required before reporting CONNECTED.
     if (!this.accessToken) {
       return 'NOT_CONFIGURED';
     }
@@ -99,7 +101,7 @@ class BufferServiceImpl implements BufferService {
       
       return await response.json();
     } catch (error) {
-      console.error('[Buffer] Failed to fetch profiles:', error);
+      console.error('[Buffer] Profile discovery failed:', error instanceof Error ? error.message : 'Unknown error');
       throw error;
     }
   }
@@ -151,7 +153,7 @@ class BufferServiceImpl implements BufferService {
       const data = await response.json();
       return data.success?.[0] || data;
     } catch (error) {
-      console.error('[Buffer] Failed to create post:', error);
+      console.error('[Buffer] Create post failed:', error instanceof Error ? error.message : 'Unknown error');
       throw error;
     }
   }
