@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import type { AffiliateProduct, ContentItem, ScheduledPost, BufferChannel, TabType } from './types';
-import { sampleProducts, sampleContentItems, sampleScheduledPosts, sampleBufferChannels } from './data/sampleData';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import ProductInput from './components/ProductInput';
@@ -11,11 +10,50 @@ import AccountManager from './components/AccountManager';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
-  const [products, setProducts] = useState<AffiliateProduct[]>(sampleProducts);
-  const [contentItems, setContentItems] = useState<ContentItem[]>(sampleContentItems);
-  const [scheduledPosts, setScheduledPosts] = useState<ScheduledPost[]>(sampleScheduledPosts);
-  const [bufferChannels, setBufferChannels] = useState<BufferChannel[]>(sampleBufferChannels);
+  const STORAGE_KEY = 'affiliatepostpro:v1';
+  const [products, setProducts] = useState<AffiliateProduct[]>([]);
+  const [contentItems, setContentItems] = useState<ContentItem[]>([]);
+  const [scheduledPosts, setScheduledPosts] = useState<ScheduledPost[]>([]);
+  const [bufferChannels, setBufferChannels] = useState<BufferChannel[]>([]);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [storageLoaded, setStorageLoaded] = useState(false);
+
+  // Load real user state only. Sample/demo fixtures are never loaded into production state.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        setProducts(Array.isArray(parsed.products) ? parsed.products : []);
+        setContentItems(Array.isArray(parsed.contentItems) ? parsed.contentItems : []);
+        setScheduledPosts(Array.isArray(parsed.scheduledPosts) ? parsed.scheduledPosts : []);
+        setBufferChannels(Array.isArray(parsed.bufferChannels) ? parsed.bufferChannels : []);
+      }
+    } catch (error) {
+      console.error('[Storage] Failed to restore application state:', error);
+      setProducts([]);
+      setContentItems([]);
+      setScheduledPosts([]);
+      setBufferChannels([]);
+    } finally {
+      setStorageLoaded(true);
+    }
+  }, []);
+
+  // Persist application state across refreshes. Secrets are intentionally excluded.
+  useEffect(() => {
+    if (!storageLoaded) return;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        products,
+        contentItems,
+        scheduledPosts,
+        bufferChannels,
+      }));
+    } catch (error) {
+      console.error('[Storage] Failed to persist application state:', error);
+    }
+  }, [storageLoaded, products, contentItems, scheduledPosts, bufferChannels]);
 
   // Handle adding a new product
   const handleAddProduct = (product: AffiliateProduct) => {
